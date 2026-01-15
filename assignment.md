@@ -1,34 +1,55 @@
 # Assignment (Optional)
 
 ## Brief
-[1–2 sentences: what to build and the expected outcome.]
 
-## Tasks
-- [Task 1]
-- [Task 2]
-- [Optional extension]
+Create a Spring Boot project called SchoolManagementSystem and implement JPA entities with relationships using H2 database.
 
-## Setup
-- [Starter/template link if any]
-- [Install & run steps (3–5 lines)]
-- [Sample I/O or endpoints]
+1. **Basic JPA Entity with CRUD Operations**
+   - Add dependencies: Spring Data JPA, H2 Database, Spring Web, and Lombok
+   - Configure H2 in `application.properties`:
+     - Enable H2 console
+     - Set database name to "school"
+   - Create a `Student` entity with:
+     - `@Entity` and `@Table(name = "student")` annotations
+     - `Long id` with `@Id` and `@GeneratedValue(strategy = GenerationType.IDENTITY)`
+     - `String firstName`, `String lastName`, `String email` with `@Column` annotations
+     - Use Lombok's @Getter and @Setter
+   - Create `StudentRepository` interface extending `JpaRepository<Student, Long>`
+   - Create `StudentService` interface and implementation with methods:
+     - `createStudent()`, `getAllStudents()`, `getStudent(Long id)`, `deleteStudent(Long id)`
+   - Create `StudentController` with endpoints:
+     - `POST /students` - Create a student
+     - `GET /students` - Get all students
+     - `GET /students/{id}` - Get a student by ID
+     - `DELETE /students/{id}` - Delete a student
+   - Create a `DataLoader` class with @Component and @PostConstruct to pre-populate 3 students
+   - Test all endpoints and verify data in H2 console
 
-## Deliverables (if submitting)
-- GitHub repo URL
-- README (setup, notes, screenshots)
-- Demo link (optional)
+2. **Implement Many-to-One Relationship**
+   - Create a `Course` entity with:
+     - `Long id`, `String courseName`, `String courseCode`
+     - Use appropriate JPA annotations
+   - Create `CourseRepository` extending `JpaRepository<Course, Long>`
+   - Add a many-to-one relationship in Student entity:
+     - `@ManyToOne(optional = false)`
+     - `@JoinColumn(name = "course_id", referencedColumnName = "id")`
+     - Field: `Course course`
+   - Update `DataLoader` to:
+     - Pre-populate 2 courses
+     - Assign each student to a course
+   - Create a nested route in StudentController:
+     - `POST /courses/{id}/students` - Add a student to a course
+   - Implement the corresponding service method to:
+     - Retrieve the course by ID
+     - Set the course on the student
+     - Save and return the student
+   - Test creating students with course associations
+   - Verify in H2 console that the `student` table has a `course_id` foreign key column
 
-## AI & Tools
-- Tools: [ChatGPT/Copilot/etc.]
-- Assisted with: [tests/docs/code]
-- Validation: [tests/manual checks]
-- Attribution: [links to adapted sources]
+## Submission (Optional)
 
-## Collaboration
-- Discuss ideas, submit your own work; credit classmates/sources.
-
-## Submission (optional)
-- Submit repo URL to NTU Blackboard.
+- Submit the URL of the GitHub Repository that contains your work to NTU black board.
+- Should you reference the work of your classmate(s) or online resources, give them credit by adding either the name of your classmate or URL.
 
 ## References
 - Java: https://docs.oracle.com/javase/
