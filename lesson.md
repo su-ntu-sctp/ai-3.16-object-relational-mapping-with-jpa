@@ -4,17 +4,14 @@
 In this lesson, you will refactor the existing `simple-crm` application to use Java Persistence API (JPA) with Hibernate and an in-memory H2 database. You will learn how Object-Relational Mapping (ORM) bridges Java classes and relational tables, how to define entities, primary keys, and repositories, and how to model real-world relationships such as one-to-many and many-to-one within a Spring Boot project.
 
 ## Lesson Objectives
-- Understand the purpose of JPA and ORM in bridging Java objects with relational databases.  
-- Configure and use H2 and Spring Data JPA for schema generation and data persistence.  
-- Create entity classes with annotations for primary keys, columns, and relationships.  
-- Implement a unidirectional many-to-one relationship and expose nested REST routes.  
-- (Optional) Extend to bidirectional one-to-many relationships with cascading and JSON-safe serialization.
+By the end of this lesson, students will be able to:
 
-# Introduction to JPA and H2
+1. **Explain** the purpose of JPA and ORM in bridging Java objects with relational databases
+2. **Configure** H2 and Spring Data JPA and refactor `simple-crm` to use a real database
+3. **Create** JPA entity classes with primary keys, column mappings, and a `JpaRepository`
+4. **Implement** a many-to-one relationship and expose nested REST routes
 
-This is an updated lesson for the original 3.12. It builds on our previous `simple-crm` project to introduce JPA and H2.
-
-You might want to make a copy of the `simple-crm` project before proceeding so that you can refer to it later.
+---
 
 ## Part 1: H2
 
@@ -56,6 +53,8 @@ By default, Spring Boot uses Hibernate as its JPA implementation. Hence, we may 
 
 ## Part 3: Refactoring `simple-crm` to use JPA and H2
 
+You might want to make a copy of the `simple-crm` project before proceeding so that you can refer to it later.
+
 ### Install JPA and H2
 
 Let's add Spring Data JPA and H2 to our project.
@@ -87,7 +86,6 @@ spring.h2.console.enabled=true
 # The URL path to the H2 console.
 spring.h2.console.path=/h2
 # The JDBC URL for the H2 database.
-# You can change the name as needed -> simple-crm
 spring.datasource.url=jdbc:h2:mem:simple-crm
 ```
 
@@ -117,7 +115,7 @@ public class Customer {
 
 ### Define a Primary Key and Name the Columns
 
-What is a **primary key (PK)**? It is a column in a database table that uniquely identifies each row in that table. It is used to ensure that each row in a table is unique. For example, in a `customers` table, the PK could be the `id` column.
+What is a **primary key (PK)**? It is a column in a database table that uniquely identifies each row in that table. It is used to ensure that each row in a table is unique.
 
 | id 🔑 | name    | email               |
 | ----- | ------- | ------------------- |
@@ -131,16 +129,16 @@ For the PK, we will use a `Long` type and annotate it with `@Id` and `@Generated
 
 These are the available strategies:
 
-| Strategy                  | Description                                                                                                                              |
-| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `GenerationType.AUTO`     | Indicates that the persistence provider should pick an appropriate strategy for the particular database. This is the default strategy.   |
-| `GenerationType.IDENTITY` | Indicates that the persistence provider must assign primary keys for the entity using a database identity column.                        |
-| `GenerationType.SEQUENCE` | Indicates that the persistence provider must assign primary keys for the entity using a database sequence.                               |
-| `GenerationType.TABLE`    | Indicates that the persistence provider must assign primary keys for the entity using an underlying database table to ensure uniqueness. |
+| Strategy | Description |
+|---|---|
+| `GenerationType.AUTO` | The persistence provider picks an appropriate strategy for the particular database. This is the default. |
+| `GenerationType.IDENTITY` | Primary keys are assigned using a database identity column. |
+| `GenerationType.SEQUENCE` | Primary keys are assigned using a database sequence. |
+| `GenerationType.TABLE` | Primary keys are assigned using an underlying database table to ensure uniqueness. |
 
-It is also possible to use a custom generator. You can read more about the generators [here](https://www.baeldung.com/hibernate-identifiers).
+You can read more about the generators [here](https://www.baeldung.com/hibernate-identifiers).
 
-Next we will add the `@Column` annotation to the `id` field to specify the name of the column in the database table that this field will be mapped to.
+Next we will add the `@Column` annotation to the `id` field to specify the name of the column in the database table.
 
 ```java
 @Id
@@ -149,7 +147,7 @@ Next we will add the `@Column` annotation to the `id` field to specify the name 
 private Long id;
 ```
 
-And proceed to do the same for the other fields. For multiple words, the convention is to use snake case e.g. `first_name`.
+Proceed to do the same for the other fields. For multiple words, the convention is to use snake case e.g. `first_name`.
 
 ```java
 @Column(name = "first_name")
@@ -166,9 +164,7 @@ private String jobTitle;
 private int yearOfBirth;
 ```
 
-Now, run the app and check the H2 console.
-
-The table should have been created for us but it has no data. Let's add some data.
+Now, run the app and check the H2 console. The table should have been created for us but it has no data. Let's add some.
 
 How we would do it in SQL would be something like this:
 
@@ -177,28 +173,26 @@ INSERT INTO customer (first_name, last_name, email, contact_no, job_title, year_
 VALUES ('John', 'Doe', 'john.doe@example.com', '12345678', 'Software Engineer', 1985);
 ```
 
-But fortunately, with JPA, we do not have to write SQL statements. The ORM is the middleman between our Java code and the database. We can use Java to interact with the database.
+But fortunately, with JPA, we do not have to write SQL statements. The ORM is the middleman between our Java code and the database.
 
 ### Set Up the Repository
 
-Now, we need to create a repository to interact with the database. As you might recall, the repository is the layer that handles the data access logic.
-
-This time though, we do not need to define a repository class. Instead, we will define a `CustomerRepository` interface that extends the `JpaRepository` interface. You can rename the current `CustomerRepository.java` to `CustomerRepository.java.old` for reference. Then create a new `CustomerRepository.java`.
+Now, we need to create a repository to interact with the database. This time, instead of a class, we define a `CustomerRepository` interface that extends `JpaRepository`. You can rename the current `CustomerRepository.java` to `CustomerRepository.java.old` for reference. Then create a new `CustomerRepository.java`.
 
 ```java
 public interface CustomerRepository extends JpaRepository<Customer, Long> {
 }
 ```
 
-In the type parameters, we specify the entity type and the type of the primary key, which in this case, are `Customer` and `Long` respectively.
+In the type parameters, we specify the entity type and the type of the primary key — `Customer` and `Long` respectively.
 
-The `JpaRepository` interface provides us with many methods for interacting with the database. The good thing is, we do not need to write any code to implement these methods. Spring JPA will automatically generate the implementation for us. This will then become a bean in our Spring container, which we can inject into our service layer.
+The `JpaRepository` interface provides many ready-made methods for interacting with the database. Spring JPA automatically generates the implementation for us and registers it as a bean in the Spring container, which we can inject into our service layer.
 
-Note that we also did not have to annotate the interface with `@Repository` because this will be handled by Spring JPA.
+Note that we do not need to annotate this interface with `@Repository` — Spring JPA handles that automatically.
 
-## Update the Service Layer
+### Update the Service Layer
 
-With the repository in place, our service layer can now use the repository since we have already used dependency injection to inject the repository into the service.
+With the repository in place, update the service layer to use it. The `CustomerServiceImpl` should inject the repository via constructor injection.
 
 ```java
 @Service
@@ -209,46 +203,39 @@ public class CustomerServiceImpl implements CustomerService {
   public CustomerServiceImpl(CustomerRepository customerRepository) {
     this.customerRepository = customerRepository;
   }
-
-  // ...
 }
 ```
 
-The methods in the service layer can now be updated to use the repository.
+Now update the service methods to use the repository.
 
 ```java
 @Override
 public Customer createCustomer(Customer customer) {
-  Customer newCustomer = customerRepository.save(customer);
-  return newCustomer;
+  return customerRepository.save(customer);
 }
 
 @Override
 public Customer getCustomer(Long id) {
-  Customer foundCustomer = customerRepository.findById(id).get();
-  return foundCustomer;
+  return customerRepository.findById(id).get();
 }
 
 @Override
 public ArrayList<Customer> getAllCustomers() {
-  List<Customer> allCustomers = customerRepository.findAll();
-  return (ArrayList<Customer>) allCustomers;
+  return new ArrayList<>(customerRepository.findAll());
 }
-
-
 
 @Override
 public Customer updateCustomer(Long id, Customer customer) {
-  // retrieve the customer from the database
+  // Retrieve the customer from the database
   Customer customerToUpdate = customerRepository.findById(id).get();
-  // update the customer retrieved from the database
+  // Update the fields
   customerToUpdate.setFirstName(customer.getFirstName());
   customerToUpdate.setLastName(customer.getLastName());
   customerToUpdate.setEmail(customer.getEmail());
   customerToUpdate.setContactNo(customer.getContactNo());
   customerToUpdate.setJobTitle(customer.getJobTitle());
   customerToUpdate.setYearOfBirth(customer.getYearOfBirth());
-  // save the updated customer back to the database
+  // Save and return the updated customer
   return customerRepository.save(customerToUpdate);
 }
 
@@ -258,13 +245,13 @@ public void deleteCustomer(Long id) {
 }
 ```
 
-Also, the helper method `getCustomerIndex` can also be removed since we are no longer using it.
+The helper method `getCustomerIndex` can also be removed since we are no longer using it.
 
-### Updating CustomerController and CustomerService interface
+### Update CustomerController and CustomerService Interface
 
-Finally, we have to update the type of the id in our `CustomerController` and the `CustomerService` interface, since we are now using a `Long` type instead of a `String` type for the `id`.
+We also need to update the `id` type from `String` to `Long` in `CustomerController` and the `CustomerService` interface.
 
-Change `String` to `Long` in `CustomerController`:
+Update `CustomerController`:
 
 ```java
 @GetMapping("{id}")
@@ -277,36 +264,29 @@ public ResponseEntity<Customer> updateCustomer(@PathVariable Long id, @RequestBo
 public ResponseEntity<HttpStatus> deleteCustomer(@PathVariable Long id)
 ```
 
-Change `String` to `Long` in the `CustomerService` interface:
+Update the `CustomerService` interface:
 
 ```java
 public interface CustomerService {
   Customer createCustomer(Customer customer);
-
   Customer getCustomer(Long id);
-
   ArrayList<Customer> getAllCustomers();
-
   Customer updateCustomer(Long id, Customer customer);
-
   void deleteCustomer(Long id);
-
 }
 ```
 
-For `CustomerServiceWithLoggingImpl.java`, in your free time, you can update it to use `Long` instead of `String` for the `id`, as well as the corresponding repository methods. For now, we can rename the file to `CustomerServiceWithLoggingImpl.java.old` so that we can test our code.
+For `CustomerServiceWithLoggingImpl.java`, rename it to `CustomerServiceWithLoggingImpl.java.old` for now so that it does not cause compilation errors while we test.
 
-Post a few new customers and check the H2 console as well as the `GET endpoint` to see that the data is persisted and can be retrieved correctly.
+Post a few new customers and check the H2 console as well as the `GET` endpoint to verify that data is persisted and retrieved correctly.
 
 ---
 
 ## Part 4: Preloading Data with a `DataLoader` class
 
-There are a few ways to preload data into the database.
+There are a few ways to preload data into the database. If we have SQL scripts, Hibernate can execute them for us. You can read more about this approach [here](https://www.masterspringboot.com/data-access/jpa-applications/preloading-data-in-spring-boot-with-import-sql-and-data-sql/).
 
-If we have sql scripts, Hibernate can execute them for us. You can read more about this approach [here](https://www.masterspringboot.com/data-access/jpa-applications/preloading-data-in-spring-boot-with-import-sql-and-data-sql/).
-
-Another way is to create a custom `DataLoader` class and annotate it with `@Component`. We can then load the data in method annotated with `@PostConstruct`. This method will be called after the bean has been created by Spring.
+Another way is to create a custom `DataLoader` class annotated with `@Component`. We load the data in a method annotated with `@PostConstruct`, which is called automatically after the bean has been created by Spring.
 
 ```java
 @Component
@@ -320,29 +300,27 @@ public class DataLoader {
 
   @PostConstruct
   public void loadData() {
-    // clear the database first
+    // Clear the database first
     customerRepository.deleteAll();
 
-    // load data here
+    // Load seed data
     customerRepository.save(new Customer("Tony", "Stark"));
     customerRepository.save(new Customer("Bruce", "Banner"));
     customerRepository.save(new Customer("Peter", "Parker"));
     customerRepository.save(new Customer("Stephen", "Strange"));
-
   }
 }
 ```
 
-The advantage of this approach is that it is independent of the database type since we are using JPA. This means that we can switch to a different database without having to change the code. In addition, if we want to turn this off, we can simply comment out the `@Component` annotation.
+The advantage of this approach is that it is database-independent since we are using JPA. If we want to turn it off, we can simply comment out the `@Component` annotation.
 
 ---
 
-## 👨‍💻 Activity
+## 👨‍💻 Activity **(10 minutes)**
 
-Add an `Interaction` resource to our app. This will be used to store the interactions
-between a customer and a salesperson.
+Add an `Interaction` resource to the app. This will be used to store the interactions between a customer and a salesperson.
 
-The `Interaction` resource should have the following fields:
+The `Interaction` class should have the following fields:
 
 ```java
 private Long id;
@@ -350,7 +328,9 @@ private String remarks;
 private LocalDate interactionDate;
 ```
 
-You should be able to post an interaction JSON like this:
+Annotate it as a JPA entity with appropriate `@Id`, `@GeneratedValue`, and `@Column` annotations. Create an `InteractionRepository` interface that extends `JpaRepository`.
+
+You should be able to POST an interaction like this:
 
 ```json
 {
@@ -363,18 +343,15 @@ You should be able to post an interaction JSON like this:
 
 ## Part 5: Many To One Relationship (Unidirectional)
 
-Most of the time, the data in our database will be related to each other.
-
-For example:
+Most of the time, data in our database will be related to each other. For example:
 
 - MANY students work on ONE project
 - MANY products are sold by ONE store
-- MANY soccer players play for ONE team
 - MANY interactions are made with ONE customer
 
 In our application, MANY interactions can be associated with ONE customer. This is known as a **many-to-one** relationship.
 
-In other words, we need to know which interactions are made with which customer. In SQL, this is done by adding a **foreign key** to the `interaction` table. A foreign key is a column that references the primary key of another table.
+In SQL, this is done by adding a **foreign key** to the `interaction` table. A foreign key is a column that references the primary key of another table.
 
 For example, this is our `Customer` table:
 
@@ -386,17 +363,15 @@ For example, this is our `Customer` table:
 
 And this is our `Interaction` table:
 
-| id 🔑 | remarks                                | interaction_date | customer_id 🗝️ |
-| ----- | -------------------------------------- | ---------------- | -------------- |
-| 1     | "Presented products to customer."      | 2021-01-01       | 1              |
-| 2     | "Customer decided to buy the product." | 2021-01-02       | 1              |
-| 3     | "Customer has a low budget currently." | 2021-01-03       | 2              |
+| id 🔑 | remarks | interaction_date | customer_id 🗝️ |
+|---|---|---|---|
+| 1 | "Presented products to customer." | 2021-01-01 | 1 |
+| 2 | "Customer decided to buy the product." | 2021-01-02 | 1 |
+| 3 | "Customer has a low budget currently." | 2021-01-03 | 2 |
 
 The `customer_id` column in the `Interaction` table is a foreign key that references the `id` column in the `Customer` table.
 
-With Spring JPA, all we have to do is to add the `@ManyToOne` annotation to the `customer` field in the `Interaction` class and this will be done for us.
-
-With the `@ManyToOne` annotation, we are saying that MANY rows in the `Interaction` table can be associated with ONE row in the `Customer` table.
+With Spring JPA, all we have to do is add the `@ManyToOne` annotation to the `customer` field in the `Interaction` class.
 
 ```java
 @ManyToOne(optional = false)
@@ -404,46 +379,41 @@ With the `@ManyToOne` annotation, we are saying that MANY rows in the `Interacti
 private Customer customer;
 ```
 
-By setting `optional = false`, we are telling JPA that the `customer` field is required and cannot be null. In other words, an interaction can only exist if it is associated with a customer.
+By setting `optional = false`, we are telling JPA that the `customer` field is required and cannot be null — an interaction can only exist if it is associated with a customer.
 
-The `@JoinColumn` annotation is used to specify the name of the foreign key column and the name of the column in the referenced table. In this case, the foreign key column is `customer_id` and it references the `id` column in the `Customer` table.
+The `@JoinColumn` annotation specifies the name of the foreign key column (`customer_id`) and the column it references (`id` in the `Customer` table).
 
-Run the app and check the H2 console. The `interactions` table should have been updated with the `customer_id` column.
+Run the app and check the H2 console. The `interaction` table should now have a `customer_id` column.
 
 ### Nested Routes
 
-A nested route is a route that is nested within another route. For example, `/customers/1/interactions` is a nested route because it is nested within the `/customers` route.
+A nested route is a route that is nested within another route. For example, `/customers/1/interactions` is nested within `/customers`. We use nested routes when we want to access a resource that belongs to another resource.
 
-We use nested routes when we want to get a resource that is associated with another resource. For example, we want to get all the interactions for a particular customer.
+For the `/customers/{id}/interactions` route:
 
-A route like `/customers/1/interactions` refers to the interactions associated with the customer with id 1. Each HTTP method (`GET`, `POST`, `PUT`, `DELETE`) can be used to perform different actions on the interactions associated with the customer:
+- `POST` — add an interaction to the customer
+- `GET` — get all interactions for the customer
 
-- `GET` - get all interactions associated with the customer
-- `POST` - add an interaction to the customer
-- `PUT` - update an interaction associated with the customer
-- `DELETE` - delete an interaction associated with the customer
-
-Let's update our controller with a nested route to add an interaction to a customer.
+Let's add a nested POST route to our controller:
 
 ```java
-// Nested route - add interaction to customer
 @PostMapping("/{id}/interactions")
-public ResponseEntity<Interaction> addInteractionToCustomer(@PathVariable long id, @RequestBody Interaction interaction) {
+public ResponseEntity<Interaction> addInteractionToCustomer(@PathVariable Long id, @RequestBody Interaction interaction) {
   Interaction newInteraction = customerService.addInteractionToCustomer(id, interaction);
   return new ResponseEntity<>(newInteraction, HttpStatus.OK);
 }
 ```
 
-This means we need a new service method to add an interaction to a customer. Since we are using an interface, we can add the method to the interface and implement it in the service implementation class.
+Add the method signature to the `CustomerService` interface:
 
 ```java
 public interface CustomerService {
-  // other method signatures
-  Interaction addInteractionToCustomer(long id, Interaction interaction);
+  // existing method signatures...
+  Interaction addInteractionToCustomer(Long id, Interaction interaction);
 }
 ```
 
-Now in our `CustomerServiceImpl`, we also need to use the `InteractionRepository` to save the interaction to the database. We also need to retrieve the customer from the database and add it to the interaction before saving it. It should inject the `InteractionRepository` and `CustomerRepository` into the service implementation class.
+In `CustomerServiceImpl`, inject both repositories and implement the method:
 
 ```java
 private CustomerRepository customerRepository;
@@ -454,44 +424,38 @@ public CustomerServiceImpl(CustomerRepository customerRepository, InteractionRep
   this.customerRepository = customerRepository;
   this.interactionRepository = interactionRepository;
 }
-```
 
-Then we can add the method to the service implementation class.
-
-```java
 @Override
-public Interaction addInteractionToCustomer(long id, Interaction interaction) {
-  // retrieve the customer from the database
+public Interaction addInteractionToCustomer(Long id, Interaction interaction) {
+  // Retrieve the customer from the database
   Customer selectedCustomer = customerRepository.findById(id).get();
-  // add the customer to the interaction
+  // Associate the customer with the interaction
   interaction.setCustomer(selectedCustomer);
-  // save the interaction to the database
+  // Save and return the interaction
   return interactionRepository.save(interaction);
 }
 ```
 
-Test out adding interactions to a customers to the endpoint `localhost:8080/customers/1/interactions`
+Test adding interactions to a customer at `localhost:8080/customers/1/interactions`.
 
 ---
 
 ## Part 6 (Optional): One To Many Relationship (Bidirectional)
 
-Currently, when we get an interaction, we can see the customer associated with it. But when we get a customer, we cannot see the interactions associated with it. This is because it is a **unidirectional** relationship.
+Currently, when we retrieve an interaction, we can see the customer associated with it. But when we retrieve a customer, we cannot see their interactions. This is a **unidirectional** relationship.
 
-Sometimes we might want to see the interactions associated with a customer as well. This is known as a **bidirectional** relationship.
-
-To see the interactions associated with a customer, we need to create a **one-to-many** relationship, i.e. ONE customer can have MANY interactions.
-
-In our `Customer` class, we will add the `@OneToMany` annotation to the `interactions` field to indicate that it is a one-to-many relationship. The `mappedBy` attribute is used to specify the field in the `Interaction` class that maps this relationship. This tells Spring JPA that the owner of this relationship is the `Interaction` class, because it is the one that has the foreign key.
+To make it **bidirectional** — so that retrieving a customer also returns their interactions — add the `@OneToMany` annotation to the `Customer` class.
 
 ```java
 @OneToMany(mappedBy = "customer")
 private List<Interaction> interactions;
 ```
 
-If you try to add an interaction or get a customer with interactions now, the application will crash. This is because there is an infinite recursion problem. The `Customer` class has a list of `Interaction` objects, and each `Interaction` object has a `Customer` object. This will cause an infinite loop.
+The `mappedBy` attribute tells Spring JPA that the `Interaction` class owns the relationship (because it holds the foreign key).
 
-To solve this, we can use the `@JsonBackReference` annotation on the `customer` field in the `Interaction` class.
+If you try to retrieve a customer now, the application will crash due to **infinite recursion** — `Customer` has a list of `Interaction` objects, each of which has a `Customer`, which has a list of `Interaction` objects, and so on.
+
+To fix this, add the `@JsonBackReference` annotation to the `customer` field in the `Interaction` class:
 
 ```java
 @JsonBackReference
@@ -500,22 +464,22 @@ To solve this, we can use the `@JsonBackReference` annotation on the `customer` 
 private Customer customer;
 ```
 
-Test it again and see.
+Test again to verify it works correctly.
 
 ---
 
 ## Part 7 (Optional): Cascade
 
-When we delete a customer, we also want to delete all the interactions associated with that customer. This is known as **cascading**.
+Currently, if you try to delete a customer who has interactions, you will get an error because the interactions reference that customer.
 
-Currently, if you try to delete a customer, you will get an error because there are interactions associated with that customer.
-
-To solve this, we can use the `CascadeType.ALL` attribute on the `interactions` field in the `Customer` class. This tells JPA to cascade all operations (e.g. save, update, delete) to the associated interactions.
+To automatically delete all interactions when a customer is deleted, add `cascade = CascadeType.ALL` to the `@OneToMany` annotation in the `Customer` class:
 
 ```java
 @OneToMany(mappedBy = "customer", cascade = CascadeType.ALL)
 private List<Interaction> interactions;
 ```
+
+This tells JPA to cascade all operations (save, update, delete) from the `Customer` to its associated `Interaction` records.
 
 ---
 
