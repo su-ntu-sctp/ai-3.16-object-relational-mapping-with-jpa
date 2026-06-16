@@ -91,6 +91,8 @@ spring.datasource.url=jdbc:h2:mem:simple-crm
 
 Start the app with `mvn clean spring-boot:run` and try accessing the H2 console at `http://localhost:8080/h2`.
 
+> **Note:** You may see a console message about Hibernate auto-detecting the H2 dialect. This is expected behaviour in Spring Boot 3.x — Hibernate 6 detects the dialect automatically, so no additional configuration is needed.
+
 <img src="./assets/images/h2-console-login.png" width=500 />
 
 Test the connection.
@@ -194,6 +196,8 @@ Note that we do not need to annotate this interface with `@Repository` — Sprin
 
 With the repository in place, update the service layer to use it. The `CustomerServiceImpl` should inject the repository via constructor injection.
 
+> **Note:** In Spring Boot 3.x, if a class has only one constructor, Spring will inject it automatically — you do not need to add `@Autowired`. It is shown here for clarity, but in practice most teams omit it.
+
 ```java
 @Service
 public class CustomerServiceImpl implements CustomerService {
@@ -216,18 +220,20 @@ public Customer createCustomer(Customer customer) {
 
 @Override
 public Customer getCustomer(Long id) {
-  return customerRepository.findById(id).get();
+  return customerRepository.findById(id)
+      .orElseThrow(() -> new RuntimeException("Customer not found with id: " + id));
 }
 
 @Override
-public ArrayList<Customer> getAllCustomers() {
-  return new ArrayList<>(customerRepository.findAll());
+public List<Customer> getAllCustomers() {
+  return customerRepository.findAll();
 }
 
 @Override
 public Customer updateCustomer(Long id, Customer customer) {
   // Retrieve the customer from the database
-  Customer customerToUpdate = customerRepository.findById(id).get();
+  Customer customerToUpdate = customerRepository.findById(id)
+      .orElseThrow(() -> new RuntimeException("Customer not found with id: " + id));
   // Update the fields
   customerToUpdate.setFirstName(customer.getFirstName());
   customerToUpdate.setLastName(customer.getLastName());
@@ -247,6 +253,9 @@ public void deleteCustomer(Long id) {
 
 The helper method `getCustomerIndex` can also be removed since we are no longer using it.
 
+> **Why `.orElseThrow()` instead of `.get()`?**
+> `findById()` returns an `Optional<Customer>`. Calling `.get()` directly on an empty Optional throws a cryptic `NoSuchElementException` with no useful message. Using `.orElseThrow()` gives you control over the error — you can throw a meaningful exception that can be caught and returned as a proper HTTP 404 response. This is standard practice in production Spring Boot applications.
+
 ### Update CustomerController and CustomerService Interface
 
 We also need to update the `id` type from `String` to `Long` in `CustomerController` and the `CustomerService` interface.
@@ -264,13 +273,13 @@ public ResponseEntity<Customer> updateCustomer(@PathVariable Long id, @RequestBo
 public ResponseEntity<HttpStatus> deleteCustomer(@PathVariable Long id)
 ```
 
-Update the `CustomerService` interface:
+Update the `CustomerService` interface — note that `getAllCustomers` now returns `List<Customer>` instead of `ArrayList<Customer>`. We code to the interface, not the implementation:
 
 ```java
 public interface CustomerService {
   Customer createCustomer(Customer customer);
   Customer getCustomer(Long id);
-  ArrayList<Customer> getAllCustomers();
+  List<Customer> getAllCustomers();
   Customer updateCustomer(Long id, Customer customer);
   void deleteCustomer(Long id);
 }
@@ -287,6 +296,21 @@ Post a few new customers and check the H2 console as well as the `GET` endpoint 
 There are a few ways to preload data into the database. If we have SQL scripts, Hibernate can execute them for us. You can read more about this approach [here](https://www.masterspringboot.com/data-access/jpa-applications/preloading-data-in-spring-boot-with-import-sql-and-data-sql/).
 
 Another way is to create a custom `DataLoader` class annotated with `@Component`. We load the data in a method annotated with `@PostConstruct`, which is called automatically after the bean has been created by Spring.
+
+> **Note:** `@PostConstruct` comes from `jakarta.annotation.PostConstruct`. Make sure this import is resolved — VS Code / Copilot should add it automatically, but check if you see a red import squiggle.
+
+Before using the `DataLoader`, make sure your `Customer` class has a constructor that accepts `firstName` and `lastName`. JPA requires a no-arg constructor (keep that too), and you can add a convenience constructor alongside it:
+
+```java
+// Required by JPA — do not remove
+public Customer() {}
+
+// Convenience constructor for the DataLoader
+public Customer(String firstName, String lastName) {
+  this.firstName = firstName;
+  this.lastName = lastName;
+}
+```
 
 ```java
 @Component
@@ -400,7 +424,7 @@ Let's add a nested POST route to our controller:
 @PostMapping("/{id}/interactions")
 public ResponseEntity<Interaction> addInteractionToCustomer(@PathVariable Long id, @RequestBody Interaction interaction) {
   Interaction newInteraction = customerService.addInteractionToCustomer(id, interaction);
-  return new ResponseEntity<>(newInteraction, HttpStatus.OK);
+  return new ResponseEntity<>(newInteraction, HttpStatus.CREATED);
 }
 ```
 
@@ -428,7 +452,8 @@ public CustomerServiceImpl(CustomerRepository customerRepository, InteractionRep
 @Override
 public Interaction addInteractionToCustomer(Long id, Interaction interaction) {
   // Retrieve the customer from the database
-  Customer selectedCustomer = customerRepository.findById(id).get();
+  Customer selectedCustomer = customerRepository.findById(id)
+      .orElseThrow(() -> new RuntimeException("Customer not found with id: " + id));
   // Associate the customer with the interaction
   interaction.setCustomer(selectedCustomer);
   // Save and return the interaction
@@ -463,6 +488,8 @@ To fix this, add the `@JsonBackReference` annotation to the `customer` field in 
 @JoinColumn(name = "customer_id", referencedColumnName = "id")
 private Customer customer;
 ```
+
+> **Instructor Note:** `@JsonBackReference` is a quick fix that works well for learning purposes. In production applications, the standard approach is to use **DTOs (Data Transfer Objects)** — separate classes that control exactly what fields get serialized in each response. DTOs eliminate the circular reference problem entirely and give you full control over your API contract. We will cover DTOs in a later lesson.
 
 Test again to verify it works correctly.
 
