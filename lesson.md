@@ -70,9 +70,16 @@ Let's add Spring Data JPA and H2 to our project.
   <artifactId>h2</artifactId>
   <scope>runtime</scope>
 </dependency>
+
+<dependency>
+  <groupId>org.springframework.boot</groupId>
+  <artifactId>spring-boot-h2console</artifactId>
+</dependency>
 ```
 
 The scope of the H2 dependency is set to `runtime` because we only need it for development and testing. It will not be needed in production.
+
+> **Important — Spring Boot 4:** Spring Boot 4 modularized its auto-configuration, so the H2 console's auto-configuration code no longer comes bundled with the raw `h2` dependency. Without the `spring-boot-h2console` dependency above, the H2 console will not be reachable — visiting its path will return a 404 (`NoResourceFoundException`) instead of the login screen. Adding this dependency is what registers the console itself; the raw `h2` dependency only provides the database engine. This same pattern applies to other technologies in Spring Boot 4 — for example, Flyway and Liquibase now need their own dedicated starters (`spring-boot-starter-flyway`, `spring-boot-starter-liquibase`) instead of just the raw driver dependency.
 
 ### Configure and Test H2
 
@@ -91,7 +98,9 @@ spring.datasource.url=jdbc:h2:mem:simple-crm
 
 Start the app with `mvn clean spring-boot:run` and try accessing the H2 console at `http://localhost:8080/h2`.
 
-> **Note:** You may see a console message about Hibernate auto-detecting the H2 dialect. This is expected behaviour in Spring Boot 3.x — Hibernate 6 detects the dialect automatically, so no additional configuration is needed.
+> **Note:** You may see a console message about Hibernate auto-detecting the H2 dialect. This is expected behaviour in Spring Boot 4.x — Hibernate 7 detects the dialect automatically, so no additional configuration is needed.
+
+> **Confirm it worked:** Check your application's startup log for the line `H2 console available at '/h2'`. If you don't see this line, the H2 console auto-configuration did not register — double check the `spring-boot-h2console` dependency above was added and the project was rebuilt.
 
 <img src="./assets/images/h2-console-login.png" width=500 />
 
@@ -414,6 +423,8 @@ You should be able to POST an interaction like this:
   "interactionDate": "2023-08-01"
 }
 ```
+
+> **Note:** You won't be able to test this yet — the endpoint to create an `Interaction` is built in Part 5 via the nested route on `CustomerController`. At this stage you only have the `Interaction` entity and `InteractionRepository`; there is no controller/endpoint exposed for it yet.
 
 ---
 
