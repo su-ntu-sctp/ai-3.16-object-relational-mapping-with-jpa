@@ -1,7 +1,7 @@
 # Lesson: Object-Relational Mapping with JPA
 
 ## Lesson Overview
-In this lesson, you will refactor the existing `simple-crm` application to use Java Persistence API (JPA) with Hibernate and an in-memory H2 database. You will learn how Object-Relational Mapping (ORM) bridges Java classes and relational tables, how to define entities, primary keys, and repositories, and how to model real-world relationships such as one-to-many and many-to-one within a Spring Boot project.
+In this lesson, you will refactor the existing `simple-crm` application to use Java Persistence API (JPA) with Hibernate and an in-memory H2 database. You will learn how Object-Relational Mapping (ORM) bridges Java classes and relational tables, how to define entities, primary keys, and repositories, and how to model a real-world many-to-one relationship within a Spring Boot project.
 
 ## Lesson Objectives
 By the end of this lesson, students will be able to:
@@ -158,7 +158,15 @@ Next we will add the `@Column` annotation to the `id` field to specify the name 
 private Long id;
 ```
 
-> **Important:** Make sure to also update the `id` field type in your `Customer` class from `int` or `String` to `Long`, to match the repository and service signatures throughout the application.
+> **Important — this change does not propagate automatically:** Changing the `id` field type to `Long` in the `Customer` entity does **not** update the other layers for you. You must manually update the `id` type to `Long` everywhere it appears:
+> - `CustomerService` interface (all methods that take an `id`)
+> - `CustomerServiceImpl` (all methods that take an `id`)
+> - `CustomerController` (`@PathVariable Long id` in all three methods — get, update, delete)
+> - `CustomerNotFoundException` constructor (its parameter must change from `String` to `Long`, or the call won't match and you'll get a compile error)
+>
+> Also check `CustomerRepository` in case any changes are needed there.
+>
+> **Tip:** Change the entity first, then follow the red squiggles in VS Code — they will point you to every layer that still needs updating.
 
 Proceed to do the same for the other fields. For multiple words, the convention is to use snake case e.g. `first_name`.
 
@@ -232,7 +240,7 @@ public Customer createCustomer(Customer customer) {
 @Override
 public Customer getCustomer(Long id) {
   return customerRepository.findById(id)
-      .orElseThrow(() -> new RuntimeException("Customer not found with id: " + id));
+      .orElseThrow(() -> new CustomerNotFoundException(id));
 }
 
 @Override
@@ -244,7 +252,7 @@ public List<Customer> getAllCustomers() {
 public Customer updateCustomer(Long id, Customer customer) {
   // Retrieve the customer from the database
   Customer customerToUpdate = customerRepository.findById(id)
-      .orElseThrow(() -> new RuntimeException("Customer not found with id: " + id));
+      .orElseThrow(() -> new CustomerNotFoundException(id));
   // Update the fields
   customerToUpdate.setFirstName(customer.getFirstName());
   customerToUpdate.setLastName(customer.getLastName());
@@ -266,6 +274,8 @@ The helper method `getCustomerIndex` can also be removed since we are no longer 
 
 > **Why `.orElseThrow()` instead of `.get()`?**
 > `findById()` returns an `Optional<Customer>`. Calling `.get()` directly on an empty Optional throws a cryptic `NoSuchElementException` with no useful message. Using `.orElseThrow()` gives you control over the error — you can throw a meaningful exception that can be caught and returned as a proper HTTP 404 response. This is standard practice in production Spring Boot applications.
+
+> **Use your own `CustomerNotFoundException`, not `RuntimeException`:** You already have a `CustomerNotFoundException` from earlier lessons, and your `CustomerController` catches `CustomerNotFoundException` in its try-catch blocks. So the service must throw that same exception. If the service throws a generic `RuntimeException` instead, the controller's `catch (CustomerNotFoundException e)` will **not** match it (because `CustomerNotFoundException` is more specific), and the client gets a `500` instead of the intended `404`. Make sure every `.orElseThrow()` in the service throws `new CustomerNotFoundException(id)`.
 
 ### Update CustomerController and CustomerService Interface
 
@@ -307,6 +317,8 @@ Post a few new customers and check the H2 console as well as the `GET` endpoint 
 There are a few ways to preload data into the database. If we have SQL scripts, Hibernate can execute them for us. You can read more about this approach [here](https://www.masterspringboot.com/data-access/jpa-applications/preloading-data-in-spring-boot-with-import-sql-and-data-sql/).
 
 Another way is to create a custom `DataLoader` class annotated with `@Component`. We load the data in a method annotated with `@PostConstruct`, which is called automatically after the bean has been created by Spring.
+
+> **Which folder does `DataLoader` go in?** `DataLoader` is a startup/bootstrap helper — it is not a controller, model, service, or repository, so it does not belong in any of those folders. Create a new `config` folder and place `DataLoader` there. `config` is the standard convention for startup and setup classes, and more configuration classes (such as `@Bean` definitions) will live there in later lessons.
 
 > **Note:** `@PostConstruct` comes from `jakarta.annotation.PostConstruct`. Make sure this import is resolved — VS Code / Copilot should add it automatically, but check if you see a red import squiggle.
 
@@ -598,7 +610,7 @@ public class CustomerServiceImpl implements CustomerService {
   public Interaction addInteractionToCustomer(Long id, Interaction interaction) {
     // Step 1: Find the customer — throw an error if not found
     Customer selectedCustomer = customerRepository.findById(id)
-        .orElseThrow(() -> new RuntimeException("Customer not found with id: " + id));
+        .orElseThrow(() -> new CustomerNotFoundException(id));
     // Step 2: Link the customer to the interaction
     interaction.setCustomer(selectedCustomer);
     // Step 3: Save and return the interaction
@@ -611,6 +623,8 @@ public class CustomerServiceImpl implements CustomerService {
 > 1. We find the customer by the `id` from the URL
 > 2. We call `interaction.setCustomer(selectedCustomer)` — this is what sets the `customer_id` foreign key in the database. JPA reads this relationship and stores the customer's id automatically.
 > 3. We save the interaction with the customer already linked to it
+
+> **Use `CustomerNotFoundException`, not `RuntimeException`:** As with the other service methods, this lookup must throw your own `CustomerNotFoundException` so the controller's try-catch matches it and returns a `404`. Throwing a generic `RuntimeException` here would fall through to a `500`.
 
 ---
 
@@ -653,228 +667,6 @@ With this request body:
 > **Important:** Notice that you do **not** include `customer_id` in the request body. The customer is identified by the `{id}` in the URL — `/customers/1/interactions`. JPA sets the foreign key automatically from there. This is clean REST design.
 
 After posting, open the H2 console and check the `interaction` table. You will see the row with `customer_id = 1` set automatically.
-
----
-
-## Part 6 (Optional): One To Many Relationship (Bidirectional)
-
-Currently, when we retrieve an interaction, we can see the customer associated with it. But when we retrieve a customer, we cannot see their interactions. This is a **unidirectional** relationship.
-
-To make it **bidirectional** — so that retrieving a customer also returns their interactions — we need to make two changes:
-1. Add `@OneToMany` to the `Customer` class
-2. Add `@JsonBackReference` to the `customer` field in the `Interaction` class
-
----
-
-### Step 1 — Add `@OneToMany` to the `Customer` Entity
-
-Here is the complete `Customer` class with the `@OneToMany` field added:
-
-```java
-package com.ntu.sg.simple_crm.entity;
-
-import java.util.List;
-
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.OneToMany;
-import jakarta.persistence.Table;
-
-@Entity
-@Table(name = "customer")
-public class Customer {
-
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "id")
-    private Long id;
-
-    @Column(name = "first_name")
-    private String firstName;
-
-    @Column(name = "last_name")
-    private String lastName;
-
-    @Column(name = "email")
-    private String email;
-
-    @Column(name = "contact_no")
-    private String contactNo;
-
-    @Column(name = "job_title")
-    private String jobTitle;
-
-    @Column(name = "year_of_birth")
-    private int yearOfBirth;
-
-    @OneToMany(mappedBy = "customer")
-    private List<Interaction> interactions;  // 👈 new
-
-    // No-arg constructor (required by JPA)
-    public Customer() {}
-
-    // Convenience constructor
-    public Customer(String firstName, String lastName) {
-        this.firstName = firstName;
-        this.lastName = lastName;
-    }
-
-    // Getters and setters
-    public Long getId() { return id; }
-    public void setId(Long id) { this.id = id; }
-
-    public String getFirstName() { return firstName; }
-    public void setFirstName(String firstName) { this.firstName = firstName; }
-
-    public String getLastName() { return lastName; }
-    public void setLastName(String lastName) { this.lastName = lastName; }
-
-    public String getEmail() { return email; }
-    public void setEmail(String email) { this.email = email; }
-
-    public String getContactNo() { return contactNo; }
-    public void setContactNo(String contactNo) { this.contactNo = contactNo; }
-
-    public String getJobTitle() { return jobTitle; }
-    public void setJobTitle(String jobTitle) { this.jobTitle = jobTitle; }
-
-    public int getYearOfBirth() { return yearOfBirth; }
-    public void setYearOfBirth(int yearOfBirth) { this.yearOfBirth = yearOfBirth; }
-
-    public List<Interaction> getInteractions() { return interactions; }
-    public void setInteractions(List<Interaction> interactions) { this.interactions = interactions; }
-}
-```
-
-> **Note:** If you are using Lombok, you do **not** need to write the getters, setters, or no-arg constructor manually. Just add the `interactions` field — `@Data` and `@NoArgsConstructor` handle the rest. Keep only the convenience constructor since Lombok does not generate that for you.
-
-**Breaking down `@OneToMany`:**
-
-**`mappedBy = "customer"`** — this tells JPA "the `Interaction` class owns this relationship — look at the field called `customer` in `Interaction` for the foreign key." This is important: `mappedBy` means "I am NOT the owner, the other side is." Since `Interaction` already has `@ManyToOne` and `@JoinColumn`, it owns the foreign key. `Customer` just mirrors the relationship.
-
----
-
-### Step 2 — Fix Infinite Recursion with `@JsonBackReference`
-
-If you try to GET a customer now, the app will crash with a `StackOverflowError`. Here is why:
-
-```
-Customer → has List<Interaction> → each Interaction → has Customer → has List<Interaction> → ...
-```
-
-Jackson (the JSON serializer) keeps going round and round forever trying to serialize the objects.
-
-To fix this, add `@JsonBackReference` to the `customer` field in the `Interaction` class. This tells Jackson: **"stop here — do not serialize this field."**
-
-Here is the complete updated `Interaction` entity:
-
-```java
-package com.ntu.sg.simple_crm.entity;
-
-import java.time.LocalDate;
-
-import com.fasterxml.jackson.annotation.JsonBackReference;
-
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.ManyToOne;
-import jakarta.persistence.Table;
-
-@Entity
-@Table(name = "interaction")
-public class Interaction {
-
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "id")
-    private Long id;
-
-    @Column(name = "remarks")
-    private String remarks;
-
-    @Column(name = "interaction_date")
-    private LocalDate interactionDate;
-
-    @JsonBackReference          // 👈 new
-    @ManyToOne(optional = false)
-    @JoinColumn(name = "customer_id", referencedColumnName = "id")
-    private Customer customer;
-
-    // No-arg constructor (required by JPA)
-    public Interaction() {}
-
-    // Getters and setters
-    public Long getId() { return id; }
-    public void setId(Long id) { this.id = id; }
-
-    public String getRemarks() { return remarks; }
-    public void setRemarks(String remarks) { this.remarks = remarks; }
-
-    public LocalDate getInteractionDate() { return interactionDate; }
-    public void setInteractionDate(LocalDate interactionDate) { this.interactionDate = interactionDate; }
-
-    public Customer getCustomer() { return customer; }
-    public void setCustomer(Customer customer) { this.customer = customer; }
-}
-```
-
-> **Note:** If you are using Lombok, replace the manual constructor and getters/setters with `@Data` and `@NoArgsConstructor` — only the fields and JPA annotations are needed.
-
-> **Instructor Note:** `@JsonBackReference` is a quick fix that works well for learning purposes. In production applications, the standard approach is to use **DTOs (Data Transfer Objects)** — separate classes that define exactly what fields get returned in each response. DTOs eliminate the circular reference problem entirely and give full control over the API contract. We will cover DTOs in a later lesson.
-
----
-
-### What to Expect After This
-
-When you GET a customer, the response will now include their interactions:
-
-```json
-{
-    "id": 1,
-    "firstName": "Tony",
-    "lastName": "Stark",
-    "email": "tony@stark.com",
-    "contactNo": "12345678",
-    "jobTitle": "CEO",
-    "yearOfBirth": 1970,
-    "interactions": [
-        {
-            "id": 1,
-            "remarks": "Presented products to customer.",
-            "interactionDate": "2026-06-16"
-        },
-        {
-            "id": 2,
-            "remarks": "Followed up on proposal.",
-            "interactionDate": "2026-06-17"
-        }
-    ]
-}
-```
-
-Notice the `customer` field is **not** shown inside each interaction — that is `@JsonBackReference` stopping the recursion.
-
----
-
-## Part 7 (Optional): Cascade
-
-Currently, if you try to delete a customer who has interactions, you will get an error because the interactions reference that customer.
-
-To automatically delete all interactions when a customer is deleted, add `cascade = CascadeType.ALL` to the `@OneToMany` annotation in the `Customer` class:
-
-```java
-@OneToMany(mappedBy = "customer", cascade = CascadeType.ALL)
-private List<Interaction> interactions;
-```
-
-This tells JPA to cascade all operations (save, update, delete) from the `Customer` to its associated `Interaction` records.
 
 ---
 

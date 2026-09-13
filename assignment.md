@@ -46,10 +46,7 @@ Create a Spring Boot project called SchoolManagementSystem and implement JPA ent
    - Test creating students with course associations
    - Verify in H2 console that the `student` table has a `course_id` foreign key column
 
-## Submission (Optional)
 
-- Submit the URL of the GitHub Repository that contains your work to NTU black board.
-- Should you reference the work of your classmate(s) or online resources, give them credit by adding either the name of your classmate or URL.
 
 ## References
 - Java: https://docs.oracle.com/javase/
