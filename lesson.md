@@ -670,4 +670,49 @@ After posting, open the H2 console and check the `interaction` table. You will s
 
 ---
 
+## Part 6 (Optional ): Seeing It From the Customer's Side
+
+Right now the link only works one way: from an interaction you can see its customer, but from a customer you cannot see their interactions. To also see a customer's interactions when you GET a customer, add a matching field on the `Customer` side.
+
+### Step 1 — Add `@OneToMany` to the `Customer` Entity
+
+Add this field to the `Customer` class:
+
+```java
+@OneToMany(mappedBy = "customer")
+private List<Interaction> interactions;
+```
+
+`mappedBy = "customer"` tells JPA that the `Interaction` class already owns this relationship through its `customer` field and its foreign key. The `Customer` side is just mirroring it — no new column is created.
+
+### Step 2 — Prevent the Infinite Loop with `@JsonBackReference`
+
+If you GET a customer now, the app crashes with a `StackOverflowError`. The customer lists its interactions, each interaction points back to the customer, which lists its interactions again, forever.
+
+To stop this, add `@JsonBackReference` to the `customer` field in the `Interaction` class:
+
+```java
+@JsonBackReference
+@ManyToOne(optional = false)
+@JoinColumn(name = "customer_id", referencedColumnName = "id")
+private Customer customer;
+```
+
+This tells Jackson to stop when it reaches that field, so it does not loop. Now a GET on a customer shows their interactions, and the customer is hidden inside each interaction.
+
+> **One-direction limit:** `@JsonBackReference` only lets you show the relationship one way. You can show interactions under a customer, or the customer under an interaction, but not both at once — showing both brings back the infinite loop. The clean production solution for showing both is a **DTO (Data Transfer Object)** — a separate class that defines exactly what each response returns. DTOs are covered in a later lesson.
+
+### Step 3 (Optional) — Cascade Deletes
+
+By default, deleting a customer who still has interactions causes an error, because those interactions reference the customer. If you want deleting a customer to also delete their interactions automatically, add a cascade setting to the `@OneToMany`:
+
+```java
+@OneToMany(mappedBy = "customer", cascade = CascadeType.ALL)
+private List<Interaction> interactions;
+```
+
+This tells JPA to pass operations (including delete) from the customer down to its interactions.
+
+---
+
 END
