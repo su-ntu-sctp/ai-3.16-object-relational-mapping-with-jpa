@@ -272,8 +272,13 @@ public void deleteCustomer(Long id) {
 
 The helper method `getCustomerIndex` can also be removed since we are no longer using it.
 
-> **Why `.orElseThrow()` instead of `.get()`?**
-> `findById()` returns an `Optional<Customer>`. Calling `.get()` directly on an empty Optional throws a cryptic `NoSuchElementException` with no useful message. Using `.orElseThrow()` gives you control over the error — you can throw a meaningful exception that can be caught and returned as a proper HTTP 404 response. This is standard practice in production Spring Boot applications.
+> **What is `Optional`, and why `.orElseThrow()`?**
+> **What it is:** `findById()` does not return a `Customer` directly. It returns an `Optional<Customer>`. An `Optional` is a box that either has a value inside or is empty. Java uses it here to be honest about a simple fact: the id you searched for might not exist in the database.
+>
+> **Why it's here:** In the old days a missing result returned `null`, and forgetting to check for null caused crashes later (the famous `NullPointerException`). `Optional` replaces that. It forces you to deal with the "nothing found" case on the spot, instead of being surprised by a null later.
+>
+> **How we handle it:** We need to open the box and take the customer out. One way is `.get()` — but if the box is empty, `.get()` throws a confusing, meaningless error. The better way is `.orElseThrow()`: if the customer is there, it hands it back; if the box is empty, it throws an exception we choose — a clear "customer not found" that we can turn into a proper 404 response.
+
 
 > **Use your own `CustomerNotFoundException`, not `RuntimeException`:** You already have a `CustomerNotFoundException` from earlier lessons, and your `CustomerController` catches `CustomerNotFoundException` in its try-catch blocks. So the service must throw that same exception. If the service throws a generic `RuntimeException` instead, the controller's `catch (CustomerNotFoundException e)` will **not** match it (because `CustomerNotFoundException` is more specific), and the client gets a `500` instead of the intended `404`. Make sure every `.orElseThrow()` in the service throws `new CustomerNotFoundException(id)`.
 
